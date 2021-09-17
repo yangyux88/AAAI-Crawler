@@ -1,0 +1,85 @@
+import mysql.connector
+import requests
+from bs4 import BeautifulSoup
+import urllib
+import urllib.request as urllib2
+import time
+from urllib.error import HTTPError
+import os
+
+mydb = mysql.connector.connect(
+    host="*****",
+    user="*****",
+    password="*****",
+    database="ai4cyber_ailandscape",
+    auth_plugin='mysql_native_password')
+
+chapter_link = ['https://aaai.org/Library/AAAI/aaai20contents-issue01.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue02.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue03.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue04.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue05.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue06.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue07.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue08.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue09.php',
+               'https://aaai.org/Library/AAAI/aaai20contents-issue10.php']
+
+article = []
+for i in range(0,9):
+    url = chapter_link[i]
+    html = requests.get(url)
+    soup = BeautifulSoup(html.content,"html.parser")
+
+    key_word = 'article'
+
+    link = soup.find_all('a',href=True)
+    for tag in link:
+        links = tag.attrs.get('href')
+        if key_word in links:
+            if len(links) == 53:
+                article.append(links)
+
+data = []
+for i in range(0,1719):
+    time.sleep(2)
+    url = article[i]
+    aus = []
+    affs = []
+    try:  
+        response = urllib2.urlopen(url)
+        html = requests.get(url)
+        soup = BeautifulSoup(html.content,'html.parser')
+        for item in soup.find_all('h1'):
+            title = item.text
+            title = " ".join(title.split())
+            data.append(title)
+        for names in soup.find_all('span',class_="name"):
+            author = names.text
+            author = " ".join(author.split())
+            aus.append(author)
+            authors = ",".join(map(str,aus))
+        seen = []
+        for aff in soup.find_all('span',class_="affiliation"):
+            affiliation = aff.text
+            affiliation = " ".join(affiliation.split())
+            seen.append(affiliation)
+            affset = set(seen)
+        for affiliation in affset:
+            affs.append(affiliation)
+            affiliations = ",".join(map(str,affs))
+        for dates in soup.find_all('div',class_='item published'):
+            date = dates.find_all('span')[0].text
+            data.append(date)
+            mycursor = mydb.cursor()
+            sql = "INSERT INTO aaai (Author, Affiliation, Title, Date) VALUES (%s, %s, %s, %s)"
+            val = (authors,affiliations,title,date)
+            try:
+                mycursor.execute(sql, val)
+                mydb.commit()
+                print(mycursor.rowcount, "record inserted.")
+            except (mysql.connector.errors.IntegrityError, mysql.connector.errors.DatabaseError):
+                print("Unable to insert record, continuing...")
+    except HTTPError as err:
+        if err.code == 404:
+            pass
